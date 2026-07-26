@@ -17,10 +17,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Wake up API
+        run: |
+          curl -s --max-time 60 "https://eo404--ai-bug-hunter-fastapi-app.modal.run/" || true
+          sleep 5
+
       - name: Get PR diff and call API
         run: |
           git diff origin/${{ github.base_ref }}...HEAD | grep '^[+-]' | grep -v '^[+-][+-][+-]' | head -c 300 | tr -d '\n\r\"\`\\' > clean_diff.txt
-          curl -s -X POST "https://eo404--ai-bug-hunter-fastapi-app.modal.run/predict" \
+          curl -s --max-time 120 -X POST "https://eo404--ai-bug-hunter-fastapi-app.modal.run/predict" \
             -H "Content-Type: application/json" \
             -d "{\"diff_text\": \"$(cat clean_diff.txt)\"}" \
             -o response.json
