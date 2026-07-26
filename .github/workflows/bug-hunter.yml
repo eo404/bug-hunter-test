@@ -14,20 +14,18 @@ jobs:
           fetch-depth: 0
 
       - name: Get PR diff and call API
-        id: prediction
         run: |
-          git diff origin/${{ github.base_ref }}...HEAD | grep '^[+-]' | grep -v '^[+-][+-][+-]' | head -c 800 | tr -d '\n\"\`\r' > clean_diff.txt
+          git diff origin/${{ github.base_ref }}...HEAD | grep '^[+-]' | grep -v '^[+-][+-][+-]' | head -c 500 | tr -d '\n\r\"\`\\' > clean_diff.txt
           DIFF=$(cat clean_diff.txt)
-          RESPONSE=$(curl -s -X POST "https://eo404--ai-bug-hunter-fastapi-app.modal.run/predict" -H "Content-Type: application/json" --data-binary "{\"diff_text\": \"${DIFF}\"}")
-          echo "response<<EOF" >> $GITHUB_OUTPUT
-          echo "${RESPONSE}" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          curl -s -X POST "https://eo404--ai-bug-hunter-fastapi-app.modal.run/predict" -H "Content-Type: application/json" -d "{\"diff_text\": \"${DIFF}\"}" > response.json
+          cat response.json
 
       - name: Post comment on PR
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
-            const raw = `${{ steps.prediction.outputs.response }}`;
+            const fs = require('fs');
+            const raw = fs.readFileSync('response.json', 'utf8');
             const response = JSON.parse(raw);
             const emoji = response.prediction === 'BUGGY' ? '🔴' : '🟢';
             const tokens = response.top_buggy_tokens.map(t => t.token).join(', ');
