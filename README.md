@@ -10,3 +10,5 @@
 ## Wake up test
 
 ## Run model directly in action
+
+## Use predict.py script
