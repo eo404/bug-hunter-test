@@ -40,18 +40,16 @@ jobs:
           script: |
             const fs = require('fs');
             const response = JSON.parse(fs.readFileSync('response.json', 'utf8'));
-            const emoji = response.prediction === 'BUGGY' ? '🔴' : '🟢';
-            const buggy = response.top_buggy_tokens.join(', ');
-            const clean = response.top_clean_tokens.join(', ');
-            const body = emoji + ' ## AI Bug Hunter Report\n\n' +
-              '| | |\n|---|---|\n' +
-              '| **Prediction** | ' + response.prediction + ' |\n' +
-              '| **Confidence** | ' + response.confidence + '% |\n' +
-              '| **Risky tokens** | `' + buggy + '` |\n' +
-              '| **Safe tokens** | `' + clean + '` |\n\n' +
-              '### 🧠 BugHunter AI Analysis\n\n' +
+            const status = response.prediction === 'BUGGY' ? 'BUGGY' : 'CLEAN';
+            const flag = response.prediction === 'BUGGY' ? '[BUGGY]' : '[CLEAN]';
+            const buggy = response.top_buggy_tokens.filter(t => t.trim()).join(', ');
+            const body = flag + ' AI Bug Hunter Report\n\n' +
+              'Prediction: ' + status + '\n' +
+              'Confidence: ' + response.confidence + '%\n' +
+              'Risky tokens: ' + buggy + '\n\n' +
+              '--- BugHunter AI Analysis ---\n\n' +
               response.fix_suggestion + '\n\n' +
-              '---\n> Powered by CodeBERT + SHAP + BugHunter AI';
+              'Powered by CodeBERT + SHAP + BugHunter AI';
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,

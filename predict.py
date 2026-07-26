@@ -42,47 +42,34 @@ shap_df = shap_df.sort_values("shap_value", ascending=False)
 top_buggy = shap_df[shap_df["shap_value"] > 0].head(5)["token"].tolist()
 top_clean = shap_df[shap_df["shap_value"] < 0].head(5)["token"].tolist()
 
-# BugHunter AI character
-SYSTEM_PROMPT = """You are BugHunter AI — an elite code security and quality analyst with expertise in:
-- Software defect detection and prevention
-- Secure coding practices
-- Code smell identification
-- Software engineering best practices
+SYSTEM_PROMPT = """You are BugHunter AI, an expert code reviewer.
 
-Your personality:
-- Direct and precise — no fluff
-- Developer-friendly — explain in simple terms
-- Constructive — always provide actionable fixes
-- Educational — briefly explain WHY something is risky
+Analyze the given code diff and respond in this exact format with no emojis:
 
-Your response format is ALWAYS:
-1. 🐛 Bug Risk: One sentence on what could go wrong
-2. 📍 Risky Line: Quote the exact line from the diff that is most dangerous
-3. ⚠️ Impact: What would happen if this bug reaches production
-4. 🔧 Fix: Exact code suggestion to fix the issue
-5. 📚 Learn More: One line on the coding principle violated
+Bug Risk: [one sentence on what could go wrong]
+Risky Line: [quote the exact risky line from the diff]
+Impact: [what happens if this reaches production]
+Fix: [exact code fix suggestion]
+Principle: [one coding principle being violated]
 
 Rules:
-- Never be vague — always reference specific tokens or lines
-- If multiple risks exist, focus on the most critical one
-- Keep total response under 200 words
-- Use markdown formatting
-- If the code looks clean, still mention 1 improvement suggestion"""
+- Be specific, reference exact lines and tokens
+- Keep response under 150 words
+- No emojis
+- Simple language any developer can understand
+- If code looks clean, still give one improvement tip"""
 
-# LLM fix suggestion
-def get_fix_suggestion(diff, risky_tokens, prediction):
-    user_prompt = f"""Commit flagged as: {prediction}
-Confidence: {round(confidence, 2)}%
-Risky tokens detected by SHAP: {', '.join(risky_tokens)}
+def get_fix_suggestion(diff, risky_tokens, prediction, confidence):
+    user_prompt = f"""Prediction: {prediction} ({round(confidence, 2)}% confidence)
+Risky tokens: {', '.join(risky_tokens)}
 
 Code diff:
-{diff[:300]}
-
-Analyze this commit and respond in your exact format."""
+{diff[:300]}"""
 
     # Try Claude API first
     claude_key = os.environ.get("CLAUDE_API_KEY")
     if claude_key:
+        print("Trying Claude API...")
         response = requests.post(
             "https://api.anthropic.com/v1/messages",
             headers={
@@ -97,12 +84,15 @@ Analyze this commit and respond in your exact format."""
                 "messages": [{"role": "user", "content": user_prompt}]
             }
         )
+        print(f"Claude status: {response.status_code}")
         if response.status_code == 200:
             return response.json()["content"][0]["text"]
 
     # Try Groq API
     groq_key = os.environ.get("GROQ_API_KEY")
+    print(f"Groq key exists: {bool(groq_key)}")
     if groq_key:
+        print("Trying Groq API...")
         response = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers={
@@ -118,23 +108,26 @@ Analyze this commit and respond in your exact format."""
                 "max_tokens": 400
             }
         )
+        print(f"Groq status: {response.status_code}")
+        print(f"Groq response: {response.text[:200]}")
         if response.status_code == 200:
             return response.json()["choices"][0]["message"]["content"]
 
-    # Fallback — no API available
-    return """🐛 Bug Risk: Potentially risky code patterns detected.
-📍 Risky Line: Check tokens flagged by SHAP analysis above.
-⚠️ Impact: Could cause unexpected behavior in production.
-🔧 Fix: Review flagged tokens and add appropriate null checks and error handling.
-📚 Learn More: Follow defensive programming principles."""
+    # Fallback
+    print("Both APIs failed, using fallback")
+    return """Bug Risk: Potentially risky code patterns detected.
+Risky Line: Check tokens flagged by SHAP analysis above.
+Impact: Could cause unexpected behavior in production.
+Fix: Review flagged tokens and add appropriate null checks and error handling.
+Principle: Follow defensive programming principles."""
 
-fix_suggestion = get_fix_suggestion(diff, top_buggy, prediction)
+fix_suggestion = get_fix_suggestion(diff, top_buggy, prediction, confidence)
 
 result = {
     "prediction": prediction,
     "confidence": round(confidence, 2),
-    "top_buggy_tokens": top_buggy,
-    "top_clean_tokens": top_clean,
+    "top_buggy_tokens": [t.strip() for t in top_buggy if t.strip()],
+    "top_clean_tokens": [t.strip() for t in top_clean if t.strip()],
     "fix_suggestion": fix_suggestion
 }
 
