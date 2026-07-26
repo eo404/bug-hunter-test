@@ -18,3 +18,5 @@
 ## Add BugHunter AI character
 
 ## Debug Groq API
+
+## Test with new Groq key
