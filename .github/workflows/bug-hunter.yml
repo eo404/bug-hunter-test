@@ -26,7 +26,7 @@ jobs:
         run: pip install transformers torch huggingface_hub shap pandas requests --quiet
 
       - name: Get diff
-        run: git diff origin/${{ github.base_ref }}...HEAD | head -c 1000 > diff.txt
+        run: git diff origin/${{ github.base_ref }}...HEAD > diff.txt
 
       - name: Run prediction
         env:
@@ -40,16 +40,27 @@ jobs:
           script: |
             const fs = require('fs');
             const response = JSON.parse(fs.readFileSync('response.json', 'utf8'));
-            const status = response.prediction === 'BUGGY' ? 'BUGGY' : 'CLEAN';
-            const flag = response.prediction === 'BUGGY' ? '[BUGGY]' : '[CLEAN]';
+            const status = response.prediction === 'BUGGY' ? '[BUGGY]' : '[CLEAN]';
             const buggy = response.top_buggy_tokens.filter(t => t.trim()).join(', ');
-            const body = flag + ' AI Bug Hunter Report\n\n' +
-              'Prediction: ' + status + '\n' +
+
+            let riskyLinesText = '';
+            if (response.risky_lines && response.risky_lines.length > 0) {
+              riskyLinesText = 'Risky locations found:\n';
+              response.risky_lines.forEach(r => {
+                riskyLinesText += '  File: ' + r.file + ', Line ' + r.line + '\n';
+                riskyLinesText += '  Code: ' + r.content + '\n\n';
+              });
+            }
+
+            const body = status + ' AI Bug Hunter Report\n\n' +
+              'Prediction: ' + response.prediction + '\n' +
               'Confidence: ' + response.confidence + '%\n' +
               'Risky tokens: ' + buggy + '\n\n' +
+              riskyLinesText +
               '--- BugHunter AI Analysis ---\n\n' +
               response.fix_suggestion + '\n\n' +
               'Powered by CodeBERT + SHAP + BugHunter AI';
+
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
