@@ -15,9 +15,15 @@ jobs:
 
       - name: Get PR diff and call API
         run: |
-          git diff origin/${{ github.base_ref }}...HEAD | grep '^[+-]' | grep -v '^[+-][+-][+-]' | head -c 500 | tr -d '\n\r\"\`\\' > clean_diff.txt
-          DIFF=$(cat clean_diff.txt)
-          curl -s -X POST "https://eo404--ai-bug-hunter-fastapi-app.modal.run/predict" -H "Content-Type: application/json" -d "{\"diff_text\": \"${DIFF}\"}" > response.json
+          git diff origin/${{ github.base_ref }}...HEAD | grep '^[+-]' | grep -v '^[+-][+-][+-]' | head -c 300 | tr -d '\n\r\"\`\\' > clean_diff.txt
+          echo "Diff content:"
+          cat clean_diff.txt
+          echo "Calling API..."
+          curl -v -X POST "https://eo404--ai-bug-hunter-fastapi-app.modal.run/predict" \
+            -H "Content-Type: application/json" \
+            -d "{\"diff_text\": \"hello world\"}" \
+            -o response.json
+          echo "API Response:"
           cat response.json
 
       - name: Post comment on PR
@@ -26,6 +32,7 @@ jobs:
           script: |
             const fs = require('fs');
             const raw = fs.readFileSync('response.json', 'utf8');
+            console.log('Raw response:', raw);
             const response = JSON.parse(raw);
             const emoji = response.prediction === 'BUGGY' ? '🔴' : '🟢';
             const tokens = response.top_buggy_tokens.map(t => t.token).join(', ');
