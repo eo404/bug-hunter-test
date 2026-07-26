@@ -17,30 +17,51 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Wake up API
-        run: |
-          curl -s --max-time 60 "https://eo404--ai-bug-hunter-fastapi-app.modal.run/" || true
-          sleep 5
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
 
-      - name: Get PR diff and call API
+      - name: Install dependencies
+        run: pip install transformers torch huggingface_hub --quiet
+
+      - name: Get diff and predict
         run: |
-          git diff origin/${{ github.base_ref }}...HEAD | grep '^[+-]' | grep -v '^[+-][+-][+-]' | head -c 300 | tr -d '\n\r\"\`\\' > clean_diff.txt
-          curl -s --max-time 120 -X POST "https://eo404--ai-bug-hunter-fastapi-app.modal.run/predict" \
-            -H "Content-Type: application/json" \
-            -d "{\"diff_text\": \"$(cat clean_diff.txt)\"}" \
-            -o response.json
-          cat response.json
+          git diff origin/${{ github.base_ref }}...HEAD | head -c 1000 > diff.txt
+          python3 - <<'EOF'
+import torch
+import torch.nn.functional as F
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+import json
+
+tokenizer = AutoTokenizer.from_pretrained("eldho15/ai-bug-hunter")
+model = AutoModelForSequenceClassification.from_pretrained("eldho15/ai-bug-hunter")
+model.eval()
+
+with open("diff.txt") as f:
+    diff = f.read()[:500]
+
+inputs = tokenizer(diff, max_length=512, padding="max_length", truncation=True, return_tensors="pt")
+with torch.no_grad():
+    output = model(**inputs)
+probs = F.softmax(output.logits, dim=1)
+confidence = float(probs[0][1]) * 100
+prediction = "BUGGY" if confidence > 50 else "CLEAN"
+
+result = {"prediction": prediction, "confidence": round(confidence, 2)}
+with open("response.json", "w") as f:
+    json.dump(result, f)
+print(json.dumps(result))
+EOF
 
       - name: Post comment on PR
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            const raw = fs.readFileSync('response.json', 'utf8');
-            const response = JSON.parse(raw);
+            const response = JSON.parse(fs.readFileSync('response.json', 'utf8'));
             const emoji = response.prediction === 'BUGGY' ? '🔴' : '🟢';
-            const tokens = response.top_buggy_tokens.map(t => t.token).join(', ');
-            const body = emoji + ' **AI Bug Hunter**\n\n**Prediction:** ' + response.prediction + '\n**Confidence:** ' + response.confidence + '%\n**Risky tokens:** ' + tokens + '\n\n> Powered by CodeBERT + SHAP';
+            const body = emoji + ' **AI Bug Hunter**\n\n**Prediction:** ' + response.prediction + '\n**Confidence:** ' + response.confidence + '%\n\n> Powered by CodeBERT + SHAP';
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,

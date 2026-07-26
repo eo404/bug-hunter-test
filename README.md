@@ -8,3 +8,5 @@
 ## Permission fix test
 
 ## Wake up test
+
+## Run model directly in action
