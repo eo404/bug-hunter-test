@@ -23,7 +23,7 @@ jobs:
           python-version: '3.10'
 
       - name: Install dependencies
-        run: pip install transformers torch huggingface_hub --quiet
+        run: pip install transformers torch huggingface_hub shap pandas --quiet
 
       - name: Get diff
         run: git diff origin/${{ github.base_ref }}...HEAD | head -c 1000 > diff.txt
@@ -38,7 +38,15 @@ jobs:
             const fs = require('fs');
             const response = JSON.parse(fs.readFileSync('response.json', 'utf8'));
             const emoji = response.prediction === 'BUGGY' ? '🔴' : '🟢';
-            const body = emoji + ' **AI Bug Hunter**\n\n**Prediction:** ' + response.prediction + '\n**Confidence:** ' + response.confidence + '%\n\n> Powered by CodeBERT + SHAP';
+            const buggy = response.top_buggy_tokens.join(', ');
+            const clean = response.top_clean_tokens.join(', ');
+            const body = emoji + ' **AI Bug Hunter Report**\n\n' +
+              '| | |\n|---|---|\n' +
+              '| **Prediction** | ' + response.prediction + ' |\n' +
+              '| **Confidence** | ' + response.confidence + '% |\n' +
+              '| **Risky tokens** | `' + buggy + '` |\n' +
+              '| **Safe tokens** | `' + clean + '` |\n\n' +
+              '> Powered by CodeBERT + SHAP';
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
