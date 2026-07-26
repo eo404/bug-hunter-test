@@ -23,12 +23,15 @@ jobs:
           python-version: '3.10'
 
       - name: Install dependencies
-        run: pip install transformers torch huggingface_hub shap pandas --quiet
+        run: pip install transformers torch huggingface_hub shap pandas requests --quiet
 
       - name: Get diff
         run: git diff origin/${{ github.base_ref }}...HEAD | head -c 1000 > diff.txt
 
       - name: Run prediction
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
         run: python predict.py
 
       - name: Post comment on PR
@@ -40,13 +43,15 @@ jobs:
             const emoji = response.prediction === 'BUGGY' ? '🔴' : '🟢';
             const buggy = response.top_buggy_tokens.join(', ');
             const clean = response.top_clean_tokens.join(', ');
-            const body = emoji + ' **AI Bug Hunter Report**\n\n' +
+            const body = emoji + ' ## AI Bug Hunter Report\n\n' +
               '| | |\n|---|---|\n' +
               '| **Prediction** | ' + response.prediction + ' |\n' +
               '| **Confidence** | ' + response.confidence + '% |\n' +
               '| **Risky tokens** | `' + buggy + '` |\n' +
               '| **Safe tokens** | `' + clean + '` |\n\n' +
-              '> Powered by CodeBERT + SHAP';
+              '### 🧠 BugHunter AI Analysis\n\n' +
+              response.fix_suggestion + '\n\n' +
+              '---\n> Powered by CodeBERT + SHAP + BugHunter AI';
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,

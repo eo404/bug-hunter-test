@@ -14,3 +14,5 @@
 ## Use predict.py script
 
 ## Add SHAP to PR comment
+
+## Add BugHunter AI character
